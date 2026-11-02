@@ -6,7 +6,7 @@ BloodHound gives you a graph — then *you* have to know Cypher, write queries, 
 
 No queries. No clicking. No Neo4j / Docker. Pure Python standard library — zero dependencies.
 
-![Version](https://img.shields.io/badge/version-1.2-blue)
+![Version](https://img.shields.io/badge/version-1.4-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)
 ![Tests](https://img.shields.io/badge/tests-17%20passing-brightgreen)
@@ -46,9 +46,10 @@ python3 autohound.py --input sample_data/sample_all.json --out sample_report
 
 Every run produces a standalone, offline `dashboard.html` (single file, no external assets):
 
-- **Path Explorer** — privilege-escalation paths only, ranked by importance (paths shared by thousands of principals beat one-hop paths from accounts that are already admin)
-- **Beginner mode by default** — permissions in plain words, technical names one toggle away in Expert mode
-- **"Before you start" checklist** per path, per-step done checkboxes with a progress bar, and an "I start from" account selector that filters paths to the account you actually control
+- **Path Explorer** — privilege-escalation paths only, ranked by importance (paths shared by thousands of principals beat one-hop paths from accounts that are already admin), under a slim header band with live summary stats (objects analysed / escalation paths / checked accounts)
+- **Beginner mode by default** — permissions in plain words, technical names one toggle away in Expert mode; confidence and other numbers are tucked into a collapsed details section
+- **"Before you start" checklist** per path, per-step done checkboxes with a progress bar, and an "I start from" selector listing **every** account — selecting an account with no path shows an honest "No path from X" panel with what that account does have, instead of a blank screen
+- **"Checked — no full path" section** — accounts whose power dead-ends in the data (local admin of a workstation with no onward hop, half of the DCSync rights, roastable accounts) are listed with their reasons, so no account ever looks "missing"
 - **Multi-dataset support** — feed it several SharpHound zips (one per domain / project) and get one dashboard with a dataset switcher and a report folder per dataset (`--separate` / `--combine` to control this)
 
 ## Tested on real data

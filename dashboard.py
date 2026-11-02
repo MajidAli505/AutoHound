@@ -26,6 +26,22 @@ h1{font-size:28px;line-height:1.15;margin:0}h1 span{color:var(--red)}
 .controls label{display:block;font-size:12px;font-weight:700;letter-spacing:.05em;color:var(--muted);text-transform:uppercase;margin-bottom:6px}
 select{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--ink);font-size:14px}
 .meta{font-size:12.5px;color:var(--muted);margin-top:7px}
+.toolbar{display:flex;gap:16px;flex-wrap:wrap;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 14px;margin-bottom:14px}
+.toolItem{display:flex;align-items:center;gap:8px}
+.toolItem label{font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);text-transform:uppercase;white-space:nowrap}
+.toolbar select{width:auto;min-width:180px;padding:7px 9px}
+.toolbar .meta{margin:0 0 0 auto;text-align:right}
+.checkedIntro{color:var(--muted);font-size:13.5px;padding:0 16px 6px;margin:0}
+.checkedItem{border-top:1px solid var(--line);padding:10px 16px}
+.checkedItem ul{margin:4px 0 0;padding-left:18px;color:#334155}
+.checkedItem li{margin:2px 0}
+.headerCard{display:flex;justify-content:space-between;gap:20px;align-items:center;flex-wrap:wrap;background:#101826;border-radius:16px;padding:18px 20px;margin-bottom:12px}
+.headerCard h1{color:#ffffff}
+.headerCard .tagline{color:#9fb0c3;margin:5px 0 0}
+.hcStats{display:flex;gap:10px;flex-wrap:wrap}
+.stat{background:#1b2740;border:1px solid #2b3a5f;border-radius:12px;padding:9px 15px;text-align:center;min-width:98px}
+.stat b{display:block;font-size:20px;color:#ffffff;line-height:1.2}
+.stat span{font-size:10.5px;color:#9fb0c3;text-transform:uppercase;letter-spacing:.05em}
 .warning{background:var(--orangebg);border:1px solid #fed7aa;color:#7c2d12;border-radius:12px;padding:10px 14px;margin:0 0 14px;font-size:14px}
 .layout{display:grid;grid-template-columns:360px 1fr;gap:16px;align-items:start}
 @media (max-width:900px){.layout{grid-template-columns:1fr}}
@@ -80,15 +96,16 @@ pre{background:var(--code);color:#e5edf7;border-radius:11px;padding:11px 13px;ov
 .doneLbl{display:inline-flex;gap:7px;align-items:center;margin-top:10px;font-weight:700;color:var(--green);cursor:pointer}
 footer{color:var(--muted);font-size:12.5px;margin-top:18px}
 </style></head><body><div class="wrap">
-<div class="top">
+<div class="headerCard">
   <div><h1>Auto<span>Hound</span> — Privilege Escalation Paths</h1>
   <p class="tagline">Pick a SharpHound dataset, pick a path, and follow the steps. This page shows escalation paths only — nothing else.</p></div>
-  <div class="controls"><label for="datasetSelect">Dataset / collection</label>
-  <select id="datasetSelect"></select><div class="meta" id="datasetMeta"></div>
-  <div class="subCtl"><label for="userSelect">I start from (my account)</label>
-  <select id="userSelect"></select></div>
-  <div class="subCtl"><label>Reading level</label>
-  <div class="modeSeg" id="modeSeg"><button data-m="beginner" class="on">Beginner - plain words</button><button data-m="expert">Expert - technical names</button></div></div></div>
+  <div class="hcStats" id="hcStats"></div>
+</div>
+<div class="toolbar">
+  <div class="toolItem"><label for="datasetSelect">Dataset</label><select id="datasetSelect"></select></div>
+  <div class="toolItem"><label for="userSelect">I start from</label><select id="userSelect"></select></div>
+  <div class="toolItem"><label>Reading level</label><div class="modeSeg" id="modeSeg"><button data-m="beginner" class="on">Beginner - plain words</button><button data-m="expert">Expert - technical names</button></div></div>
+  <div class="meta" id="datasetMeta"></div>
 </div>
 <div id="warning"></div>
 <main class="layout">
@@ -101,7 +118,12 @@ footer{color:var(--muted);font-size:12.5px;margin-top:18px}
   </aside>
   <section class="panel detail" id="detail"></section>
 </main>
-<footer>AutoHound v1.2 · Fully offline · One dashboard for many collections: <b>python3 autohound.py --input a.zip --input b.zip --out reports</b> (multiple zip files are treated as separate datasets). Replace &lt;YOUR_USER&gt;, &lt;PASS&gt; and &lt;NEW_PASSWORD&gt; in commands with your own values. For authorized labs / pentests only.</footer>
+<section class="panel" id="checkedPanel" style="margin-top:16px">
+  <div class="sideHead"><h2>Checked — no full path</h2><span class="count" id="checkedCount"></span></div>
+  <p class="checkedIntro">These accounts were checked too. They have some power, but in this data it does not reach Domain Admin or an admin group — the reason is written with each account, so nothing looks missing.</p>
+  <div id="checkedList"></div>
+</section>
+<footer>AutoHound v1.4 · Fully offline · One dashboard for many collections: <b>python3 autohound.py --input a.zip --input b.zip --out reports</b> (multiple zip files are treated as separate datasets). Replace &lt;YOUR_USER&gt;, &lt;PASS&gt; and &lt;NEW_PASSWORD&gt; in commands with your own values. For authorized labs / pentests only.</footer>
 </div>
 <script>
 const DATA = __DATA_JSON__;
@@ -135,7 +157,7 @@ function sortedPaths(d){
 function visiblePaths(){
   let all = sortedPaths(ds());
   if (filter !== 'all') all = all.filter(p => p.kind === filter);
-  if (userFilter !== 'all') all = all.filter(p => p.start === userFilter);
+  if (userFilter !== 'all') all = all.filter(p => shortName(p.start, ds().domain) === userFilter);
   return all;
 }
 
@@ -242,11 +264,14 @@ function buildChecklist(p, dom){
 }
 function renderUserOptions(){
   const d = ds();
-  const starts = Array.from(new Set((d.paths || []).map(p => p.start))).sort();
+  // All enabled user accounts + every path start (groups included), by short name.
+  const names = new Set(d.users || []);
+  (d.paths || []).forEach(p => names.add(shortName(p.start, d.domain)));
+  const opts = Array.from(names).sort();
   const sel = document.getElementById('userSelect');
   sel.innerHTML = '<option value="all">All accounts - show every path</option>' +
-    starts.map(s => '<option value="' + esc(s) + '">' + esc(shortName(s, d.domain)) + '</option>').join('');
-  if (userFilter !== 'all' && starts.indexOf(userFilter) < 0) userFilter = 'all';
+    opts.map(s => '<option value="' + esc(s) + '">' + esc(s) + '</option>').join('');
+  if (userFilter !== 'all' && opts.indexOf(userFilter) < 0) userFilter = 'all';
   sel.value = userFilter;
 }
 // ---- rendering ----
@@ -258,8 +283,8 @@ function renderOptions(){
 function renderMeta(){
   const d = ds();
   document.getElementById('datasetMeta').textContent =
-    'Domain: ' + (d.domain || '-') + ' · Objects analysed: ' + (d.stats ? d.stats.nodes : '-') +
-    ' · Paths verified: ' + (d.verification_text || '-');
+    'Domain: ' + (d.domain || '-') + ' · ' + (d.stats ? d.stats.nodes : '-') + ' objects · ' +
+    (d.verification_text || '').split(' verified against raw edges').join('');
   const q = d.data_quality || {};
   document.getElementById('warning').innerHTML = (q.session_edges === 0)
     ? '<div class="warning"><b>Session data is missing in this collection (0 sessions).</b> Paths that need a live admin session on a machine cannot appear here. Collect with SharpHound <b>-c All</b> for the full picture.</div>' : '';
@@ -279,7 +304,19 @@ function renderList(){
 function renderDetail(){
   const d = ds(), list = visiblePaths(), box = document.getElementById('detail');
   const p = list[selected];
-  if (!p){ box.innerHTML = '<div class="empty">No privilege-escalation path matches this selection. Pick another account or filter.</div>'; return; }
+  if (!p){
+    if (userFilter !== 'all') {
+      const c = (d.checked || []).find(x => x.short === userFilter);
+      box.innerHTML = '<div class="empty"><h3 style="margin:0 0 6px;color:var(--ink)">No path from ' + esc(userFilter) + ' in this data</h3>' +
+        '<p>' + esc(userFilter) + ' was checked. In this collection, this account does not reach Domain Admin or an admin group.</p>' +
+        (c ? '<p style="color:var(--ink)"><b>What this account does have:</b></p><ul>' + c.reasons.map(r => '<li>' + esc(r) + '</li>').join('') + '</ul>'
+           : '<p>It holds no special permission in this data - only normal group memberships.</p>') +
+        ((d.data_quality || {}).session_edges === 0 ? '<p>Note: this collection has 0 recorded sessions, so a path through a live session on a machine this account admins cannot be seen here.</p>' : '') + '</div>';
+    } else {
+      box.innerHTML = '<div class="empty">No privilege-escalation path matches this selection. Pick another account or filter.</div>';
+    }
+    return;
+  }
   const tm = typeMap(d), dom = d.domain;
   const pkey = dsIndex + '|' + p.start + '|' + p.target;
   const doneCount = (p.steps || []).filter((_, i) => doneState[pkey + '|' + i]).length;
@@ -345,8 +382,24 @@ function renderDetail(){
     if (tx) tx.textContent = c + ' of ' + p.length + ' steps done - tick each step when you finish it';
   }));
 }
-function renderAll(){ renderOptions(); renderMeta(); renderUserOptions(); renderList(); renderDetail(); }
-document.getElementById('datasetSelect').addEventListener('change', e=>{ dsIndex = +e.target.value; selected = 0; userFilter = 'all'; renderMeta(); renderUserOptions(); renderList(); renderDetail(); });
+function renderChecked(){
+  const d = ds(), list = d.checked || [], panel = document.getElementById('checkedPanel');
+  if (!list.length){ panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  document.getElementById('checkedCount').textContent = list.length + ' account(s)';
+  document.getElementById('checkedList').innerHTML = list.map(c =>
+    '<div class="checkedItem"><b>' + esc(c.short || shortName(c.name, d.domain)) + '</b><ul>' +
+    c.reasons.map(r => '<li>' + esc(r) + '</li>').join('') + '</ul></div>').join('');
+}
+function renderStats(){
+  const d = ds();
+  document.getElementById('hcStats').innerHTML =
+    '<div class="stat"><b>' + (d.stats ? d.stats.nodes : '-') + '</b><span>Objects analysed</span></div>' +
+    '<div class="stat"><b>' + (d.paths || []).length + '</b><span>Escalation paths</span></div>' +
+    '<div class="stat"><b>' + (d.checked || []).length + '</b><span>Checked — no path</span></div>';
+}
+function renderAll(){ renderOptions(); renderMeta(); renderStats(); renderUserOptions(); renderList(); renderDetail(); renderChecked(); }
+document.getElementById('datasetSelect').addEventListener('change', e=>{ dsIndex = +e.target.value; selected = 0; userFilter = 'all'; renderMeta(); renderStats(); renderUserOptions(); renderList(); renderDetail(); renderChecked(); });
 document.getElementById('userSelect').addEventListener('change', e=>{ userFilter = e.target.value; selected = 0; renderList(); renderDetail(); });
 document.querySelectorAll('#modeSeg button').forEach(b => b.addEventListener('click', ()=>{
   mode = b.dataset.m;

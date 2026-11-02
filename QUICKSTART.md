@@ -1,4 +1,4 @@
-# AutoHound v1.2 — Quick Start
+# AutoHound v1.4 — Quick Start
 
 AutoHound does one thing: you give it SharpHound / BloodHound data, and it finds
 **every privilege escalation path for you** — no queries, no clicking around in
@@ -52,6 +52,17 @@ New in v1.2 (built for beginners):
   tools used in its commands, and the one step to watch out for.
 - **Progress tracking**: tick "Mark step as done" while you follow a path;
   the progress bar at the top fills up.
+- **Every account is in the "I start from" list** (v1.4): even accounts with
+  no path. Selecting one shows an honest "No path from X in this data" panel
+  with what that account does have, instead of silently filtering to nothing.
+- The header is a dark summary band with live stat cards (objects analysed,
+  escalation paths, checked-no-path) so no space is wasted.
+- **"Checked — no full path" section** (v1.3): accounts that were checked but
+  whose power does not reach an admin target (dead-end local admins, partial
+  DCSync rights, roastable accounts) are listed under the paths, each with its
+  reason — so no account ever looks "missing" from the dashboard.
+- The header is a slim one-row toolbar (dataset, start account, reading
+  level) instead of a tall box.
 - **Numbers are tucked away** under "Numbers & technical details" — the main
   screen shows only start, step count and end result.
 

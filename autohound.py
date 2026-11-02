@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AutoHound v1.2 - Automatic BloodHound / SharpHound Privilege Escalation Path Finder
+AutoHound v1.4 - Automatic BloodHound / SharpHound Privilege Escalation Path Finder
 ====================================================================================
 BloodHound shows you a graph, YOU have to query it.
 AutoHound reads the same JSON, builds the graph itself, and AUTOMATICALLY finds:
@@ -735,7 +735,7 @@ def write_reports(g, f, outdir, include_dashboard=True):
     (outdir / "report.json").write_text(json.dumps(jout, indent=2), encoding="utf-8")
 
     dq = f.get("data_quality", {}); ver = f.get("verification", {})
-    L = ["# AutoHound v1.2 Report - Automatic Privilege Escalation Paths", "",
+    L = ["# AutoHound v1.4 Report - Automatic Privilege Escalation Paths", "",
          f"**Nodes:** {f['stats']['nodes']} | **Edges:** {f['stats']['edges']} | **High-value targets:** {f['stats']['highvalue_nodes']}",
          f"**Self-verification:** Tier-Zero paths {ver.get('tier_zero_paths','?')} | Admin chains {ver.get('admin_chains','?')} (every reported path was re-walked against the raw edges)", "",
          "## Executive Summary", "",
@@ -819,7 +819,7 @@ def write_reports(g, f, outdir, include_dashboard=True):
         L.append(f"- {gname}: {len(members)} members - {', '.join(members[:12])}" + (" …" if len(members) > 12 else ""))
     L += ["", "## 🛡️ Remediation (generated from these findings)", ""]
     L += [f"- {r}" for r in f.get("remediation", [])] or ["- No specific remediation generated."]
-    L += ["", "---", "*AutoHound v1.2 - for authorized labs / pentests only. Verify each path manually before exploiting. "
+    L += ["", "---", "*AutoHound v1.4 - for authorized labs / pentests only. Verify each path manually before exploiting. "
           "Missing sessions/LAPS edges usually mean the collector did not have rights to read them, not that they don't exist.*"]
     (outdir / "report.md").write_text("\n".join(L), encoding="utf-8")
     dash = None
@@ -923,7 +923,45 @@ def build_dashboard_data(g, f):
                    "in": indeg.get(nid, 0)}
                   for nid in cand],
         "edges": fg_edges}
-    return {"domain": domain, "stats": f["stats"], "fullgraph": fullgraph,
+    # ---- "Checked - no full path" -------------------------------------------
+    # Accounts with SOME power that does not reach Tier-Zero / an admin group
+    # in this data (dead-end local admins, partial DCSync, roastable accounts).
+    # Without this list they look "missing" from a paths-only dashboard.
+    path_starts = {p["start"] for p in f["paths"] + f["admin_chains"]}
+    asrep_names = {a["name"] for a in f["asrep"]}
+    kerb_map = {k["name"]: (k["spns"] if isinstance(k["spns"], str) else ", ".join(k["spns"])) for k in f["kerberoastable"]}
+    checked = []
+    for nid, n in g.nodes.items():
+        if n["type"] != "User" or g.is_highvalue(nid) or n["name"] in path_starts:
+            continue
+        if (n.get("properties") or {}).get("enabled") is False:
+            continue
+        outs = g.edges.get(nid, [])
+        if any(et == "MemberOf" and g.is_highvalue(d) for d, et in outs):
+            continue
+        reasons = []
+        rights = {et for _, et in outs if et in ("GetChanges", "GetChangesAll")}
+        if rights and rights != {"GetChanges", "GetChangesAll"}:
+            reasons.append("Has only half of the DCSync rights (" + "/".join(sorted(rights)) + ") - not enough on its own")
+        admins = sorted({short(g.nodes[d]["name"], g.nodes[d]["type"]) for d, et in outs if et == "AdminTo"})
+        if admins:
+            reasons.append("Local admin of " + ", ".join(admins[:4]) + " - but no onward path from those machines in this data")
+        remote = sorted({short(g.nodes[d]["name"], g.nodes[d]["type"]) for d, et in outs if et in ("CanRDP", "CanPSRemote")})
+        if remote:
+            reasons.append("Can log on remotely to " + ", ".join(remote[:4]) + " (a foothold only - not admin)")
+        if n["name"] in asrep_names:
+            reasons.append("AS-REP roastable - anyone can ask for this account's password hash and crack it offline (an attack ON this account, not a path from it)")
+        if n["name"] in kerb_map:
+            reasons.append("Kerberoastable (SPN: " + kerb_map[n["name"]] + ") - its service ticket can be requested and cracked offline (see report.md)")
+        if reasons:
+            checked.append({"name": n["name"], "short": short(n["name"], "User"), "reasons": reasons})
+    checked.sort(key=lambda c: (0 if any(r.startswith("Local admin") for r in c["reasons"]) else 1, c["short"]))
+    checked = checked[:30]
+    # Every enabled user account (short names) for the "I start from" selector:
+    # accounts with no path must be selectable too, and then show "no path".
+    users_list = sorted({short(n["name"], "User") for n in g.nodes.values()
+                         if n["type"] == "User" and (n.get("properties") or {}).get("enabled") is not False})
+    return {"domain": domain, "stats": f["stats"], "fullgraph": fullgraph, "checked": checked, "users": users_list,
             "verification_text": f"Tier-Zero {ver.get('tier_zero_paths','?')} · Admin chains {ver.get('admin_chains','?')}",
             "paths": [payload(p, "tier-zero") for p in f["paths"]] +
                      [payload(p, "admin-chain") for p in f["admin_chains"]],
